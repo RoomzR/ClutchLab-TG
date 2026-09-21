@@ -1,0 +1,95 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cs2
+      POSTGRES_PASSWORD: cs2
+      POSTGRES_DB: cs2_analyzer
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cs2 -d cs2_analyzer"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build: ./app
+    environment:
+      DATABASE_URL: postgresql://cs2:cs2@db:5432/cs2_analyzer
+      UPLOAD_DIR: uploads
+      TRUSTED_HOSTS: "*"
+      CORS_ORIGINS: "*"
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-chars!!}
+      AUTH_REQUIRED: ${AUTH_REQUIRED:-false}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PRICE_PRO_MONTHLY: ${STRIPE_PRICE_PRO_MONTHLY:-}
+      STRIPE_PRICE_PRO_YEARLY: ${STRIPE_PRICE_PRO_YEARLY:-}
+      STRIPE_PRICE_TEAM_MONTHLY: ${STRIPE_PRICE_TEAM_MONTHLY:-}
+      STRIPE_PRICE_TEAM_YEARLY: ${STRIPE_PRICE_TEAM_YEARLY:-}
+      STRIPE_PRICE_ORG_MONTHLY: ${STRIPE_PRICE_ORG_MONTHLY:-}
+      STRIPE_PRICE_ORG_YEARLY: ${STRIPE_PRICE_ORG_YEARLY:-}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-RS256}
+      JWT_PRIVATE_KEY_PATH: /app/keys/jwt_rsa_private.pem
+      JWT_PUBLIC_KEY_PATH: /app/keys/jwt_rsa_public.pem
+      FACEIT_API_KEY: ${FACEIT_API_KEY:-}
+      VOICE_NOTES_DIR: voice_notes
+      PARSE_WORKER_COUNT: ${PARSE_WORKER_COUNT:-2}
+      SEED_DEMO_USERS: ${SEED_DEMO_USERS:-true}
+      DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-Demo2026!}
+      S3_ENABLED: ${S3_ENABLED:-false}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+      S3_PREFIX: ${S3_PREFIX:-demos}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-false}
+      S3_DELETE_LOCAL_AFTER_UPLOAD: ${S3_DELETE_LOCAL_AFTER_UPLOAD:-true}
+      S3_DELETE_LOCAL_AFTER_PARSE: ${S3_DELETE_LOCAL_AFTER_PARSE:-true}
+      S3_CLEANUP_ENABLED: ${S3_CLEANUP_ENABLED:-true}
+    volumes:
+      - uploads:/app/uploads
+      - voice_notes:/app/voice_notes
+      - jwt_keys:/app/keys
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose:
+      - "8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: /api
+    ports:
+      - "80:80"
+    volumes:
+      # Drop GLBs here without rebuilding the image (maps + player/weapon models).
+      - ./frontend/public/maps:/usr/share/nginx/html/maps:ro
+      - ./frontend/public/models:/usr/share/nginx/html/models:ro
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  uploads:
+  voice_notes:
+  jwt_keys:

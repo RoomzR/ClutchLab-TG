@@ -1,0 +1,13 @@
+{
+  "name": "clutchlab-cs2parser-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@laihoe/demoparser2": "^0.41.3",
+    "cs2parser": "^1.11.1"
+  }
+}

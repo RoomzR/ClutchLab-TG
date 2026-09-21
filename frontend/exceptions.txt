@@ -1,0 +1,6 @@
+---------------
+File: D:\AnalyticsCS2\tools\s2_extract\characters\models\ctm_sas\ctm_sas.vmdl
+Exception: ValveResourceFormat.Utils.UnexpectedMagicException: Unexpected header. You likely tried to read a file that is not actually a resource (usually ends in '_c'). for variable 'HeaderVersion': 27424 (0x6B20)
+   at ValveResourceFormat.Resource.Read(Stream input, Boolean verifyFileSize, Boolean leaveOpen) in /_/ValveResourceFormat/Resource/Resource.cs:line 198
+   at CLI.Decompiler.ProcessFile(String path, Stream stream, String originalPath, IFileLoader fileLoader) in /_/CLI/Decompiler.cs:line 632
+

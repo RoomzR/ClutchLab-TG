@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+.DS_Store
+app/uploads/
+app/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Transfer archives. The map and model packs are multi-gigabyte
+# and exceed GitHub's file size limit, so they stay on disk.
+*.zip
