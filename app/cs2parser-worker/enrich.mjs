@@ -75,6 +75,7 @@ export function enrichDemo(filePath, ctx) {
 
   const wanted = [
     'player_hurt', 'player_death', 'weapon_fire', 'chat_message', 'player_ping', 'flashbang_detonate',
+    'bomb_planted', 'bomb_defused',
   ].filter((e) => available.has(e));
 
   let events = [];
@@ -186,6 +187,17 @@ export function enrichDemo(filePath, ctx) {
       num(e.user_X), num(e.user_Y),
       place(e.user_last_place_name),
     ]);
+  }
+
+  // ── Bomb site letter from the callout (cs2parser only gives the entity index) ──
+  // [tick, 'A' | 'B' | null]
+  out.bomb_sites = [];
+  for (const name of ['bomb_planted', 'bomb_defused']) {
+    for (const e of byName.get(name) || []) {
+      const pl = String(e.user_last_place_name || '');
+      const m = pl.match(/Bombsite\s*([AB])/i);
+      out.bomb_sites.push([Number(e.tick), m ? m[1].toUpperCase() : null, place(pl)]);
+    }
   }
 
   // ── Chat ─────────────────────────────────────────────────────────────────

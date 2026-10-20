@@ -634,9 +634,13 @@ async def get_positions(
     tick_end: int | None = None,
     player_names: str | None = None,
     team: str | None = None,
+    step: int | None = None,
 ):
     query = POSITIONS_SELECT
     params: list[Any] = [match_id]
+    if step and step > 1:
+        query += f" AND tick % {min(int(step), 64)} = 0"
+
     has_round_filter = round_number is not None or bool(round_numbers)
 
     if round_numbers:

@@ -1026,6 +1026,13 @@ async function parseDemo(filePath, tickStep, maxTicks) {
     console.error('enrichment failed:', err?.stack || err);
   }
 
+  if (enrichment?.bomb_sites?.length) {
+    for (const be of bombEvents) {
+      const hit = enrichment.bomb_sites.find(([t]) => Math.abs(t - be[1]) <= 4);
+      if (hit && hit[1]) be[3] = hit[1];
+    }
+  }
+
   // demoparser2 death events are the authoritative kill feed when available
   // (same ticks, plus assister/flash/wallbang/smoke context).
   let killRows = kills;

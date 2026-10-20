@@ -53,6 +53,24 @@ const TournamentsPage = lazy(() =>
   import('./pages/TournamentsPage').then((m) => ({ default: m.TournamentsPage })),
 );
 
+const AcademyLayout = lazy(() => import('./academy/AcademyLayout').then((m) => ({ default: m.AcademyLayout })));
+const HomePage = lazy(() => import('./pages/academy/HomePage').then((m) => ({ default: m.HomePage })));
+const UploadPage = lazy(() => import('./pages/academy/UploadPage').then((m) => ({ default: m.UploadPage })));
+const MatchesPage = lazy(() => import('./pages/academy/MatchesPage').then((m) => ({ default: m.MatchesPage })));
+const MatchHubPage = lazy(() => import('./pages/academy/match/MatchHubPage').then((m) => ({ default: m.MatchHubPage })));
+const PlayersPage = lazy(() => import('./pages/academy/PlayersPage').then((m) => ({ default: m.PlayersPage })));
+const PlayerProfilePage = lazy(() => import('./pages/academy/PlayerProfilePage').then((m) => ({ default: m.PlayerProfilePage })));
+const TeamsPage = lazy(() => import('./pages/academy/TeamsPage').then((m) => ({ default: m.TeamsPage })));
+const TeamProfilePage = lazy(() => import('./pages/academy/TeamsPage').then((m) => ({ default: m.TeamProfilePage })));
+const AcademyComparePage = lazy(() => import('./pages/academy/ComparePage').then((m) => ({ default: m.AcademyComparePage })));
+const ScoutingPage = lazy(() => import('./pages/academy/ScoutingPage').then((m) => ({ default: m.ScoutingPage })));
+const LineupsPage = lazy(() => import('./pages/academy/LineupsPage').then((m) => ({ default: m.LineupsPage })));
+const BoardsPage = lazy(() => import('./pages/academy/BoardsPage').then((m) => ({ default: m.BoardsPage })));
+const BoardPage = lazy(() => import('./pages/academy/BoardPage').then((m) => ({ default: m.BoardPage })));
+const TrainingPage = lazy(() => import('./pages/academy/TrainingPage').then((m) => ({ default: m.TrainingPage })));
+const AnalystsPage = lazy(() => import('./pages/academy/AnalystsPage').then((m) => ({ default: m.AnalystsPage })));
+const AcademyAdminPage = lazy(() => import('./pages/academy/AcademyAdminPage').then((m) => ({ default: m.AcademyAdminPage })));
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -87,6 +105,28 @@ export default function App() {
           <BrowserRouter>
             <Suspense fallback={<PageFallback />}>
               <Routes>
+                {/* Academy workspace */}
+                <Route element={<ProtectedRoute />}>
+                  <Route element={<AcademyLayout />}>
+                    <Route path="/dashboard" element={<HomePage />} />
+                    <Route path="/upload" element={<UploadPage />} />
+                    <Route path="/matches" element={<MatchesPage />} />
+                    <Route path="/match/:matchId" element={<MatchHubPage />} />
+                    <Route path="/players" element={<PlayersPage />} />
+                    <Route path="/players/:name" element={<PlayerProfilePage />} />
+                    <Route path="/teams" element={<TeamsPage />} />
+                    <Route path="/teams/:name" element={<TeamProfilePage />} />
+                    <Route path="/compare" element={<AcademyComparePage />} />
+                    <Route path="/scouting" element={<ScoutingPage />} />
+                    <Route path="/lineups" element={<LineupsPage />} />
+                    <Route path="/boards" element={<BoardsPage />} />
+                    <Route path="/boards/:boardId" element={<BoardPage />} />
+                    <Route path="/training" element={<TrainingPage />} />
+                    <Route path="/analysts" element={<AnalystsPage />} />
+                    <Route path="/academy/admin" element={<AcademyAdminPage />} />
+                  </Route>
+                </Route>
+
                 <Route element={<Layout />}>
                   {/* Public */}
                   <Route path="/" element={<LandingPage />} />
@@ -96,18 +136,15 @@ export default function App() {
                   <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
                   <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
 
-                  {/* Analyzer (works for guests while auth is optional) */}
-                  <Route path="/match/:matchId" element={<MatchPage />} />
-                  <Route path="/match/:matchId/watch" element={<DemoWatchPage />} />
-                  <Route path="/match/:matchId/player/:playerName" element={<PlayerPage />} />
-                  <Route path="/compare" element={<ComparePage />} />
-                  <Route path="/utility-lab" element={<GrenadeLabPage />} />
-                  <Route path="/history" element={<HistoryPage />} />
-
-                  {/* Authenticated */}
+                  {/* Classic analyzer (2D/3D studio, utility lab) */}
                   <Route element={<ProtectedRoute />}>
-                    <Route path="/dashboard" element={<DashboardPage />} />
-                    <Route path="/upload" element={<Navigate to="/dashboard" replace />} />
+                    <Route path="/match/:matchId/replay" element={<MatchPage />} />
+                    <Route path="/match/:matchId/watch" element={<DemoWatchPage />} />
+                    <Route path="/match/:matchId/player/:playerName" element={<PlayerPage />} />
+                    <Route path="/legacy/compare" element={<ComparePage />} />
+                    <Route path="/utility-lab" element={<GrenadeLabPage />} />
+                    <Route path="/history" element={<HistoryPage />} />
+                    <Route path="/legacy/dashboard" element={<DashboardPage />} />
                     <Route path="/billing" element={<BillingPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="/profile" element={<Navigate to="/settings" replace />} />
