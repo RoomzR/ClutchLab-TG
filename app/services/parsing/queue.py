@@ -50,9 +50,9 @@ def is_priority_role(role: str | None) -> bool:
     return role in PRIORITY_ROLES
 
 
-async def enqueue_parse(match_id: str, file_path: str, *, priority: bool) -> str:
-    """Queue a demo for parsing. Returns 'high' or 'normal'."""
-    item = json.dumps({"match_id": match_id, "file_path": file_path})
+async def enqueue_parse(match_id: str, file_path: str, *, priority: bool, kind: str = "parse") -> str:
+    """Queue a demo for parsing ('parse') or re-analysis only ('analyze'). Returns 'high' or 'normal'."""
+    item = json.dumps({"match_id": match_id, "file_path": file_path, "kind": kind})
     lane = "high" if priority else "normal"
 
     redis = await _get_redis()
@@ -108,15 +108,15 @@ async def _pop_next() -> dict | None:
     return None
 
 
-async def _worker(worker_id: int, handler: Callable[[str, str], Awaitable[None]]) -> None:
+async def _worker(worker_id: int, handler: Callable[[str, str, str], Awaitable[None]]) -> None:
     logger.info("Parse worker %d started", worker_id)
     while True:
         try:
             item = await _pop_next()
             if item is None:
                 continue
-            logger.info("Worker %d parsing %s", worker_id, item["match_id"])
-            await handler(item["match_id"], item["file_path"])
+            logger.info("Worker %d %s %s", worker_id, item.get("kind", "parse"), item["match_id"])
+            await handler(item["match_id"], item["file_path"], item.get("kind", "parse"))
         except asyncio.CancelledError:
             logger.info("Parse worker %d stopped", worker_id)
             raise
@@ -124,7 +124,7 @@ async def _worker(worker_id: int, handler: Callable[[str, str], Awaitable[None]]
             logger.exception("Parse worker %d crashed on item; continuing", worker_id)
 
 
-def start_workers(handler: Callable[[str, str], Awaitable[None]], count: int = 2) -> None:
+def start_workers(handler: Callable[[str, str, str], Awaitable[None]], count: int = 2) -> None:
     for i in range(count):
         _workers.append(asyncio.create_task(_worker(i + 1, handler)))
 

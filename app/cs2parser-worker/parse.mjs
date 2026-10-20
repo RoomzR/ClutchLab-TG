@@ -10,6 +10,9 @@ import { parsePlayerInfo, parseTicks } from '@laihoe/demoparser2';
 import { DemoReader, EntityMode, TeamNumber, WinRoundReason } from 'cs2parser';
 import fs from 'node:fs';
 import path from 'node:path';
+import { enrichDemo } from './enrich.mjs';
+
+export const PARSER_VERSION = '2.0.0';
 
 /**
  * parsePlayerInfo has NO crosshair_code — only name/steamid/team.
@@ -339,12 +342,28 @@ function parseSiteLabel(raw) {
   return text || '?';
 }
 
-function tickToRound(tick, roundEndTicks) {
-  if (!roundEndTicks.length) return 1;
-  for (const [endTick, roundNumber] of roundEndTicks) {
-    if (tick <= endTick) return roundNumber;
-  }
-  return roundEndTicks[roundEndTicks.length - 1][1] + 1;
+/**
+ * Round that contains `tick`: the last round whose start_tick <= tick.
+ * Post-round events (exit frags, late damage) stay in the round they happened
+ * after, instead of leaking into the next round.
+ */
+function makeRoundForTick(rounds) {
+  const starts = rounds
+    .filter((r) => r.start_tick != null)
+    .map((r) => [Number(r.start_tick), r.round_number])
+    .sort((a, b) => a[0] - b[0]);
+  return (tick) => {
+    if (!starts.length) return 1;
+    let lo = 0;
+    let hi = starts.length - 1;
+    if (tick < starts[0][0]) return starts[0][1];
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (starts[mid][0] <= tick) lo = mid;
+      else hi = mid - 1;
+    }
+    return starts[lo][1];
+  };
 }
 
 function positionAtTick(index, playerName, tick) {
@@ -539,6 +558,8 @@ async function parseDemo(filePath, tickStep, maxTicks) {
       winner: side,
       winType: WIN_REASON_NAMES[reason] || String(event?.reason || 'elimination').toLowerCase(),
       winnerTeam: winnerClan,
+      tClan: snap?.t || null,
+      ctClan: snap?.ct || null,
     });
   });
 
@@ -777,10 +798,14 @@ async function parseDemo(filePath, tickStep, maxTicks) {
       end_tick: rd.endTick,
       winner_team: rd.winnerTeam || undefined,
       freeze_end_tick: freeze != null && freeze >= rd.startTick ? freeze : undefined,
+      t_team: rd.tClan || undefined,
+      ct_team: rd.ctClan || undefined,
     });
     roundEndTicks.push([rd.endTick, rd.roundNumber]);
   }
   roundEndTicks.sort((a, b) => a[0] - b[0]);
+  const roundForTick = makeRoundForTick(rounds);
+  const tickToRound = (tick) => roundForTick(tick);
 
   // Fallback freeze_end from clock samples
   for (const rd of rounds) {
@@ -987,9 +1012,31 @@ async function parseDemo(filePath, tickStep, maxTicks) {
       crosshair_code: crosshairByName.get(name) || null,
     }));
 
+  progress(92);
+
+  let enrichment = null;
+  try {
+    enrichment = enrichDemo(filePath, { roundForTick, rounds, tickRate });
+    console.error(
+      `enrich: kills=${enrichment.kill_details.length} damages=${enrichment.damages.length} shots=${enrichment.shots.length} ` +
+        `blinds=${enrichment.blinds.length} economy=${enrichment.economy.length} zones=${enrichment.zones.length} ` +
+        `chat=${enrichment.chat.length} pings=${enrichment.pings.length} voice=${enrichment.voice.reason}`,
+    );
+  } catch (err) {
+    console.error('enrichment failed:', err?.stack || err);
+  }
+
+  // demoparser2 death events are the authoritative kill feed when available
+  // (same ticks, plus assister/flash/wallbang/smoke context).
+  let killRows = kills;
+  if (enrichment?.kill_details?.length) {
+    killRows = enrichment.kill_details.map((k) => [k[0], k[2], k[3], k[5], k[6], k[1]]);
+  }
+
   progress(100);
 
   return {
+    parser_version: PARSER_VERSION,
     map_name: mapName,
     score_t: scoreT,
     score_ct: scoreCT,
@@ -1001,10 +1048,22 @@ async function parseDemo(filePath, tickStep, maxTicks) {
     rounds,
     positions,
     grenades,
-    kills,
+    kills: killRows,
     purchases,
     bomb_events: bombEvents,
     round_pauses: roundPauses,
+    kill_details: enrichment?.kill_details ?? [],
+    damages: enrichment?.damages ?? [],
+    shots: enrichment?.shots ?? [],
+    blinds: enrichment?.blinds ?? [],
+    economy: enrichment?.economy ?? [],
+    chat: enrichment?.chat ?? [],
+    pings: enrichment?.pings ?? [],
+    zones: enrichment?.zones ?? [],
+    death_inventory: enrichment?.death_inventory ?? [],
+    early_places: enrichment?.early_places ?? [],
+    voice: enrichment?.voice ?? { available: false, reason: 'enrichment_failed' },
+    enrich_errors: enrichment?.enrich_errors ?? ['enrichment_failed'],
   };
 }
 

@@ -40,6 +40,19 @@ class ParseResult:
     purchases: list[tuple] = field(default_factory=list)
     bomb_events: list[tuple] = field(default_factory=list)
     round_pauses: list[tuple] = field(default_factory=list)
+    parser_version: str = "1.0.0"
+    kill_details: list[tuple] = field(default_factory=list)
+    damages: list[tuple] = field(default_factory=list)
+    shots: list[tuple] = field(default_factory=list)
+    blinds: list[tuple] = field(default_factory=list)
+    economy: list[tuple] = field(default_factory=list)
+    chat: list[tuple] = field(default_factory=list)
+    pings: list[tuple] = field(default_factory=list)
+    zones: list[tuple] = field(default_factory=list)
+    death_inventory: list[tuple] = field(default_factory=list)
+    early_places: list[tuple] = field(default_factory=list)
+    voice: dict[str, Any] = field(default_factory=dict)
+    enrich_errors: list[str] = field(default_factory=list)
 
 
 def _file_size_mb(path: str) -> float:
@@ -99,6 +112,19 @@ def _result_from_payload(payload: dict[str, Any]) -> ParseResult:
         purchases=_as_tuple_list(payload.get("purchases")),
         bomb_events=_as_tuple_list(payload.get("bomb_events")),
         round_pauses=_as_tuple_list(payload.get("round_pauses")),
+        parser_version=str(payload.get("parser_version") or "1.0.0"),
+        kill_details=_as_tuple_list(payload.get("kill_details")),
+        damages=_as_tuple_list(payload.get("damages")),
+        shots=_as_tuple_list(payload.get("shots")),
+        blinds=_as_tuple_list(payload.get("blinds")),
+        economy=_as_tuple_list(payload.get("economy")),
+        chat=_as_tuple_list(payload.get("chat")),
+        pings=_as_tuple_list(payload.get("pings")),
+        zones=_as_tuple_list(payload.get("zones")),
+        death_inventory=[tuple(r) for r in payload.get("death_inventory") or []],
+        early_places=_as_tuple_list(payload.get("early_places")),
+        voice=dict(payload.get("voice") or {}),
+        enrich_errors=list(payload.get("enrich_errors") or []),
     )
 
 

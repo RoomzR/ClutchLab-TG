@@ -6,7 +6,10 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql://cs2:cs2@db:5432/cs2_analyzer"
     upload_dir: str = "uploads"
-    demo_retention_days: int = 7
+    # Parsed match data retention. The .dem file itself is kept for
+    # demo_file_retention_days (needed only for re-parsing).
+    demo_retention_days: int = 90
+    demo_file_retention_days: int = 30
     allowed_hosts: str = "*"
     cors_origins: str = "*"
     trusted_hosts: str = "*"
@@ -33,8 +36,8 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 30
     refresh_token_days: int = 30
-    # Require login for uploads (enable in production)
-    auth_required: bool = False
+    # Academy data is private: login is required for every match endpoint.
+    auth_required: bool = True
     frontend_base_url: str = "http://localhost"
 
     # --- SaaS: redis ---
@@ -76,6 +79,25 @@ class Settings(BaseSettings):
 
     # --- SaaS: parse queue ---
     parse_worker_count: int = 2
+    # Parse in the API process (local dev without a worker). In Docker the
+    # dedicated `worker` service does it and this stays false.
+    parse_workers_in_api: bool = True
+
+    # --- Academy ---
+    academy_name: str = "Академия"
+    academy_slug: str = "academy"
+
+    # --- AI (optional; without keys everything falls back to rule-based output) ---
+    llm_provider: str = "auto"  # auto | anthropic | openai | none
+    anthropic_api_key: str = ""
+    openai_api_key: str = ""
+    llm_model: str = ""
+    llm_timeout_seconds: float = 45.0
+    coach_chat_per_min: int = 12
+
+    # --- Lineup videos ---
+    lineup_media_dir: str = "media/lineups"
+    max_lineup_video_bytes: int = 80 * 1024 * 1024
 
     # --- SaaS: coach tools ---
     voice_notes_dir: str = "voice_notes"

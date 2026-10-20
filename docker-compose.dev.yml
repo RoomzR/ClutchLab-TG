@@ -1,0 +1,9 @@
+# Local development: only infrastructure in Docker, API and frontend run on the host.
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db redis
+services:
+  db:
+    ports:
+      - "5433:5432"
+  redis:
+    ports:
+      - "6380:6379"

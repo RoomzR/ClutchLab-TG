@@ -4,6 +4,7 @@ import json
 import logging
 import math
 import os
+import re
 import time
 import uuid
 from collections import defaultdict
@@ -21,9 +22,19 @@ from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from config import settings
-from parser import ParseResult, compute_heatmap, compute_player_habits, parse_demo
-from postgres_repo import bulk_copy, cleanup_old_matches, close_pool, execute, fetch, fetchrow, init_pool
+from parser import compute_heatmap, compute_player_habits
+from postgres_repo import close_pool, execute, fetch, fetchrow, init_pool
 from saas_schema import ensure_saas_schema
+from db.academy_schema import ensure_academy_schema
+from core.academy import _load_user as load_academy_user, can_access, ensure_default_org, match_org
+from services.parsing.pipeline import delete_match_everything, run_parse_job
+from api.academy.matches import router as academy_matches_router
+from api.academy.stats import router as academy_stats_router
+from api.academy.coaching import router as academy_coaching_router
+from api.academy.lineups import router as academy_lineups_router
+from api.academy.analysts import router as academy_analysts_router
+from api.academy.boards import router as academy_boards_router
+from api.academy.admin import router as academy_admin_router
 from seed_users import seed_demo_users
 from auth_routes import router as auth_router
 from billing_routes import router as billing_router
@@ -68,9 +79,29 @@ if settings.sentry_dsn:
     except Exception as exc:
         logger.warning("Sentry init failed: %s", exc)
 
-parse_semaphore = asyncio.Semaphore(settings.parse_semaphore_limit)
-
 matches_cache: dict[str, dict[str, Any]] = {}
+
+LEGACY_GUARDED_PREFIXES = ("/api/matches", "/api/history", "/api/utility-lab")
+MATCH_PATH = re.compile(r"^/api/matches/([0-9a-fA-F-]{36})(?:/|$)")
+
+
+class AcademyAccessMiddleware(BaseHTTPMiddleware):
+    """Legacy analyzer routes predate organizations: require login and org match."""
+
+    async def dispatch(self, request: Request, call_next: Callable):
+        path = request.url.path
+        if request.method != "OPTIONS" and path.startswith(LEGACY_GUARDED_PREFIXES):
+            user = await get_optional_user(request)
+            au = await load_academy_user(user.id) if user else None
+            if au is None and settings.auth_required:
+                return JSONResponse({"detail": "Войдите в аккаунт академии"}, status_code=401)
+            m = MATCH_PATH.match(path)
+            if m and au is not None:
+                exists, org, owner = await match_org(m.group(1))
+                if exists and not can_access(au, org, owner):
+                    return JSONResponse({"detail": "Этот матч принадлежит другой организации"}, status_code=403)
+            request.state.academy_user = au
+        return await call_next(request)
 
 
 class RequestTimingMiddleware(BaseHTTPMiddleware):
@@ -93,31 +124,43 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
             return JSONResponse({"detail": "Request timeout"}, status_code=504)
 
 
+async def run_retention_once() -> dict[str, int]:
+    """Delete parsed data past the org retention, and .dem files past the file retention."""
+    removed = 0
+    rows = await fetch(
+        """
+        SELECT m.match_id FROM matches m LEFT JOIN organizations o ON o.id = m.org_id
+        WHERE m.created_at < NOW() - make_interval(days => COALESCE(o.retention_days, $1))
+        """,
+        settings.demo_retention_days,
+    )
+    old_ids = [str(r["match_id"]) for r in rows]
+    for mid in old_ids:
+        await delete_match_everything(mid)
+        removed += 1
+
+    files_deleted = 0
+    file_rows = await fetch(
+        """SELECT match_id, file_path FROM matches WHERE NOT file_deleted AND status IN ('ready','error')
+           AND created_at < NOW() - make_interval(days => $1)""",
+        settings.demo_file_retention_days,
+    )
+    for r in file_rows:
+        if r["file_path"]:
+            Path(r["file_path"]).unlink(missing_ok=True)
+        await execute("UPDATE matches SET file_deleted=TRUE WHERE match_id=$1", r["match_id"])
+        files_deleted += 1
+    if is_s3_enabled() and settings.s3_cleanup_enabled and (old_ids or file_rows):
+        await asyncio.to_thread(delete_demo_files, old_ids + [str(r["match_id"]) for r in file_rows])
+    logger.info("Retention: removed %s matches, %s demo files", removed, files_deleted)
+    return {"matches": removed, "files": files_deleted}
+
+
 async def cleanup_loop() -> None:
     while True:
         try:
-            await asyncio.sleep(24 * 3600)
-            old_match_ids = await cleanup_old_matches(settings.demo_retention_days)
-            count = len(old_match_ids)
-            upload_path = Path(settings.upload_dir)
-            local_deleted = 0
-            if upload_path.exists():
-                cutoff = time.time() - settings.demo_retention_days * 86400
-                for file in upload_path.glob("*.dem"):
-                    if file.stat().st_mtime < cutoff:
-                        file.unlink(missing_ok=True)
-                        local_deleted += 1
-
-            if is_s3_enabled() and settings.s3_cleanup_enabled:
-                deleted_s3 = await asyncio.to_thread(delete_demo_files, old_match_ids)
-                logger.info(
-                    "Cleanup removed %s old matches (local files: %s, S3 objects: %s)",
-                    count,
-                    local_deleted,
-                    deleted_s3,
-                )
-            else:
-                logger.info("Cleanup removed %s old matches (local files: %s)", count, local_deleted)
+            await asyncio.sleep(6 * 3600)
+            await run_retention_once()
         except asyncio.CancelledError:
             break
         except Exception as exc:
@@ -128,11 +171,15 @@ async def cleanup_loop() -> None:
 async def lifespan(app: FastAPI):
     os.makedirs(settings.upload_dir, exist_ok=True)
     os.makedirs(settings.voice_notes_dir, exist_ok=True)
+    os.makedirs(settings.lineup_media_dir, exist_ok=True)
     pool = await init_pool()
     await ensure_saas_schema(pool)
+    await ensure_academy_schema(pool)
     await seed_demo_users(pool)
+    await ensure_default_org()
     cleanup_task = asyncio.create_task(cleanup_loop())
-    start_parse_workers(_parse_demo_task, count=settings.parse_worker_count)
+    if settings.parse_workers_in_api:
+        start_parse_workers(run_parse_job, count=settings.parse_worker_count)
     digest_task = asyncio.create_task(weekly_digest_loop())
     yield
     cleanup_task.cancel()
@@ -160,6 +207,11 @@ app.include_router(integrations_router)
 app.include_router(coach_router)
 app.include_router(tournament_router)
 app.include_router(folder_router)
+for _academy_router in (
+    academy_matches_router, academy_stats_router, academy_coaching_router, academy_lineups_router,
+    academy_analysts_router, academy_boards_router, academy_admin_router,
+):
+    app.include_router(_academy_router)
 
 
 @app.get("/api/queue")
@@ -170,6 +222,7 @@ trusted = [h.strip() for h in settings.trusted_hosts.split(",") if h.strip()]
 if trusted and trusted != ["*"]:
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=trusted)
 
+app.add_middleware(AcademyAccessMiddleware)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(TimeoutMiddleware)
 app.add_middleware(RequestTimingMiddleware)
@@ -232,231 +285,6 @@ def _cached_json(
     )
 
 
-async def _save_parse_result(match_id: str, result: ParseResult) -> None:
-    await execute(
-        """
-        UPDATE matches SET map_name=$2, score_t=$3, score_ct=$4,
-        team_t_name=$5, team_ct_name=$6, tick_rate=$7, position_tick_step=$8,
-        status='ready', progress=100
-        WHERE match_id=$1
-        """,
-        match_id,
-        result.map_name,
-        result.score_t,
-        result.score_ct,
-        result.team_t_name,
-        result.team_ct_name,
-        result.tick_rate,
-        result.position_tick_step,
-    )
-
-    # Auto-link to tournament after parse (set at upload time)
-    try:
-        link = await fetchrow(
-            """
-            SELECT auto_tournament_id, auto_tournament_stage, auto_folder_id
-            FROM matches WHERE match_id = $1
-            """,
-            match_id,
-        )
-        if link and link["auto_tournament_id"]:
-            await execute(
-                """
-                INSERT INTO tournament_matches (tournament_id, match_id, stage)
-                VALUES ($1::uuid, $2, $3)
-                ON CONFLICT (tournament_id, match_id) DO UPDATE SET stage = EXCLUDED.stage
-                """,
-                str(link["auto_tournament_id"]),
-                match_id,
-                link["auto_tournament_stage"] or "group",
-            )
-        if link and link["auto_folder_id"]:
-            await execute(
-                """
-                INSERT INTO folder_matches (folder_id, match_id)
-                VALUES ($1::uuid, $2)
-                ON CONFLICT DO NOTHING
-                """,
-                str(link["auto_folder_id"]),
-                match_id,
-            )
-    except Exception as exc:
-        logger.warning("Auto folder/tournament link failed for %s: %s", match_id, exc)
-
-    for player in result.players:
-        await execute(
-            """
-            INSERT INTO players (match_id, name, team, steam_id, crosshair_code)
-            VALUES ($1, $2, $3, $4, $5)
-            """,
-            match_id,
-            player["name"],
-            player["team"],
-            player.get("steam_id"),
-            player.get("crosshair_code"),
-        )
-
-    if result.rounds:
-        await bulk_copy(
-            "rounds",
-            [
-                "match_id",
-                "round_number",
-                "winner",
-                "win_type",
-                "duration_seconds",
-                "start_tick",
-                "end_tick",
-                "winner_team",
-                "freeze_end_tick",
-            ],
-            [
-                (
-                    match_id,
-                    r["round_number"],
-                    r["winner"],
-                    r["win_type"],
-                    r["duration_seconds"],
-                    r.get("start_tick"),
-                    r.get("end_tick"),
-                    r.get("winner_team"),
-                    r.get("freeze_end_tick"),
-                )
-                for r in result.rounds
-            ],
-        )
-
-    if result.round_pauses:
-        await bulk_copy(
-            "round_pauses",
-            ["match_id", "round_number", "start_tick", "end_tick", "pause_type"],
-            [(match_id, *row) for row in result.round_pauses],
-        )
-
-    if result.positions:
-        def _pad_position(row: tuple | list) -> tuple:
-            cols = list(row)
-            # tick,name,team,x,y,z,round,yaw[,health,armor,pitch,weapon,scoped]
-            while len(cols) < 13:
-                cols.append(None)
-            if cols[12] is None:
-                cols[12] = False
-            return (match_id, *cols[:13])
-
-        await bulk_copy(
-            "positions",
-            [
-                "match_id",
-                "tick",
-                "player_name",
-                "team",
-                "x",
-                "y",
-                "z",
-                "round_number",
-                "yaw",
-                "health",
-                "armor",
-                "pitch",
-                "weapon",
-                "scoped",
-            ],
-            [_pad_position(row) for row in result.positions],
-        )
-
-    if result.grenades:
-        await bulk_copy(
-            "grenades",
-            [
-                "match_id", "grenade_type", "player_name", "team",
-                "from_x", "from_y", "from_z", "to_x", "to_y", "to_z", "tick", "round_number",
-            ],
-            [(match_id, *row) for row in result.grenades],
-        )
-
-    if result.kills:
-        await bulk_copy(
-            "kills",
-            ["match_id", "tick", "killer", "victim", "weapon", "headshot", "round_number"],
-            [(match_id, *row) for row in result.kills],
-        )
-
-    if result.purchases:
-        await bulk_copy(
-            "purchases",
-            ["match_id", "player_name", "tick", "round_number", "item", "cost"],
-            [(match_id, *row) for row in result.purchases],
-        )
-
-    if result.bomb_events:
-        await bulk_copy(
-            "bomb_events",
-            ["match_id", "event_type", "tick", "round_number", "site", "player_name", "x", "y"],
-            [(match_id, *row) for row in result.bomb_events],
-        )
-
-    matches_cache[match_id] = {
-        "positions": result.positions,
-        "grenades": result.grenades,
-        "kills": result.kills,
-    }
-
-
-async def _parse_demo_task(match_id: str, file_path: str) -> None:
-    async with parse_semaphore:
-        try:
-            await execute(
-                "UPDATE matches SET status='parsing', progress=10 WHERE match_id=$1",
-                match_id,
-            )
-
-            loop = asyncio.get_running_loop()
-
-            def on_progress(pct: int) -> None:
-                async def _update() -> None:
-                    await execute(
-                        "UPDATE matches SET progress=$2 WHERE match_id=$1",
-                        match_id,
-                        min(99, pct),
-                    )
-
-                loop.call_soon_threadsafe(lambda: asyncio.create_task(_update()))
-
-            # When using S3 storage the worker may receive a file_path that was deleted
-            # after upload. Fetch it back for parsing.
-            if is_s3_enabled() and not os.path.exists(file_path):
-                await asyncio.to_thread(download_demo_file, match_id, file_path)
-
-            result = await asyncio.to_thread(parse_demo, file_path, on_progress)
-            await _save_parse_result(match_id, result)
-
-            owner_row = await fetchrow(
-                "SELECT owner_id, map_name FROM matches WHERE match_id = $1", match_id,
-            )
-            if owner_row and owner_row["owner_id"]:
-                await publish_activity(
-                    str(owner_row["owner_id"]),
-                    "demo_ready",
-                    {"match_id": match_id, "map_name": owner_row["map_name"]},
-                )
-                await notify_demo_ready(
-                    str(owner_row["owner_id"]), match_id, owner_row["map_name"],
-                )
-        except Exception as exc:
-            logger.exception("Parse failed for %s", match_id)
-            await execute(
-                "UPDATE matches SET status='error', message=$2, progress=0 WHERE match_id=$1",
-                match_id,
-                str(exc),
-            )
-        finally:
-            if is_s3_enabled() and settings.s3_delete_local_after_parse:
-                try:
-                    Path(file_path).unlink(missing_ok=True)
-                except Exception:
-                    pass
-
-
 DEM_MAGIC_PREFIXES = (b"PBDEMS2", b"HL2DEMO")
 
 
@@ -489,6 +317,10 @@ async def _check_upload_quota(user: AuthUser, size_bytes: int) -> None:
         )
 
 
+UPLOAD_CHUNK = 4 * 1024 * 1024
+MATCH_TYPES = ("scrim", "official", "faceit", "pug", "opponent")
+
+
 @app.post("/api/matches/upload")
 async def upload_demo(
     request: Request,
@@ -496,53 +328,68 @@ async def upload_demo(
     folder_id: str | None = Form(None),
     tournament_id: str | None = Form(None),
     stage: str = Form("group"),
+    match_type: str = Form("scrim"),
+    opponent_name: str | None = Form(None),
+    played_at: str | None = Form(None),
     user: AuthUser | None = Depends(get_optional_user),
 ):
     await check_rate_limit(request, "general")
 
     if settings.auth_required and user is None:
-        raise HTTPException(401, "Log in to upload demos")
+        raise HTTPException(401, "Войдите, чтобы загружать демки")
+    if not file.filename or not file.filename.lower().endswith(".dem"):
+        raise HTTPException(400, "Поддерживаются только файлы .dem")
+    if match_type not in MATCH_TYPES:
+        raise HTTPException(400, "Неизвестный тип матча")
+    played_at_dt = None
+    if played_at:
+        try:
+            played_at_dt = datetime.fromisoformat(played_at)
+        except ValueError:
+            raise HTTPException(400, "played_at должен быть в формате ISO")
 
-    if not file.filename or not file.filename.endswith(".dem"):
-        raise HTTPException(400, "Only .dem files are allowed")
-
-    content = await file.read()
-    if len(content) > settings.max_upload_bytes:
-        raise HTTPException(413, "File exceeds 600 MB limit")
-
-    # Validate .dem signature (Source 2 / Source 1 demo headers)
-    if not content[:8].startswith(DEM_MAGIC_PREFIXES):
-        raise HTTPException(400, "File is not a valid CS2 demo (.dem signature mismatch)")
-
-    if user is not None:
-        await _check_upload_quota(user, len(content))
+    au = await load_academy_user(user.id) if user else None
 
     # Validate optional folder / tournament targets (owner-only)
     auto_folder_id = None
     auto_tournament_id = None
     auto_stage = stage if stage in ("group", "quarter", "semi", "final", "other") else "group"
     if user is not None and folder_id:
-        folder = await fetchrow(
-            "SELECT id FROM demo_folders WHERE id = $1::uuid AND owner_id = $2::uuid",
-            folder_id, user.id,
-        )
+        folder = await fetchrow("SELECT id FROM demo_folders WHERE id = $1::uuid AND owner_id = $2::uuid", folder_id, user.id)
         if not folder:
-            raise HTTPException(404, "Folder not found")
+            raise HTTPException(404, "Папка не найдена")
         auto_folder_id = folder_id
     if user is not None and tournament_id:
-        t = await fetchrow(
-            "SELECT id FROM tournaments WHERE id = $1::uuid AND owner_id = $2::uuid",
-            tournament_id, user.id,
-        )
+        t = await fetchrow("SELECT id FROM tournaments WHERE id = $1::uuid AND owner_id = $2::uuid", tournament_id, user.id)
         if not t:
-            raise HTTPException(404, "Tournament not found")
+            raise HTTPException(404, "Турнир не найден")
         auto_tournament_id = tournament_id
 
     match_id = str(uuid.uuid4())
     file_path = os.path.join(settings.upload_dir, f"{match_id}.dem")
-
-    with open(file_path, "wb") as f:
-        f.write(content)
+    size = 0
+    try:
+        with open(file_path, "wb") as f:
+            first = True
+            while True:
+                chunk = await file.read(UPLOAD_CHUNK)
+                if not chunk:
+                    break
+                if first:
+                    if not chunk[:8].startswith(DEM_MAGIC_PREFIXES):
+                        raise HTTPException(400, "Файл не похож на демку CS2 (неверная сигнатура .dem)")
+                    first = False
+                size += len(chunk)
+                if size > settings.max_upload_bytes:
+                    raise HTTPException(413, f"Файл больше {settings.max_upload_bytes // (1024 * 1024)} МБ")
+                f.write(chunk)
+        if size == 0:
+            raise HTTPException(400, "Пустой файл")
+        if user is not None:
+            await _check_upload_quota(user, size)
+    except BaseException:
+        Path(file_path).unlink(missing_ok=True)
+        raise
 
     if is_s3_enabled():
         try:
@@ -554,25 +401,18 @@ async def upload_demo(
 
     await execute(
         """
-        INSERT INTO matches (match_id, status, progress, file_path, owner_id,
-                             auto_folder_id, auto_tournament_id, auto_tournament_stage)
-        VALUES ($1, 'pending', 0, $2, $3::uuid, $4::uuid, $5::uuid, $6)
+        INSERT INTO matches (match_id, status, progress, file_path, owner_id, auto_folder_id, auto_tournament_id,
+                             auto_tournament_stage, org_id, match_type, opponent_name, played_at, original_filename)
+        VALUES ($1, 'pending', 0, $2, $3::uuid, $4::uuid, $5::uuid, $6, $7::uuid, $8, $9, $10, $11)
         """,
-        match_id,
-        file_path,
-        user.id if user else None,
-        auto_folder_id,
-        auto_tournament_id,
-        auto_stage,
+        match_id, file_path, user.id if user else None, auto_folder_id, auto_tournament_id, auto_stage,
+        (au.org_id if au else None), match_type, opponent_name, played_at_dt, file.filename[:200],
     )
+    await execute("INSERT INTO parse_jobs (match_id, kind, status) VALUES ($1, 'parse', 'queued')", match_id)
 
     if auto_folder_id:
         await execute(
-            """
-            INSERT INTO folder_matches (folder_id, match_id)
-            VALUES ($1::uuid, $2)
-            ON CONFLICT DO NOTHING
-            """,
+            "INSERT INTO folder_matches (folder_id, match_id) VALUES ($1::uuid, $2) ON CONFLICT DO NOTHING",
             auto_folder_id, match_id,
         )
 
@@ -580,7 +420,7 @@ async def upload_demo(
     if user is not None:
         await execute(
             "INSERT INTO demo_usage (user_id, match_id, file_size_bytes) VALUES ($1::uuid, $2, $3)",
-            user.id, match_id, len(content),
+            user.id, match_id, size,
         )
         try:
             await award_xp(user.id, XP_PER_UPLOAD, "demo_upload")
@@ -588,12 +428,11 @@ async def upload_demo(
         except Exception as exc:
             logger.warning("Gamification update failed: %s", exc)
 
-    lane = await enqueue_parse(
-        match_id, file_path, priority=is_priority_role(user.role if user else None),
-    )
+    lane = await enqueue_parse(match_id, file_path, priority=is_priority_role(user.role if user else None))
     return {
         "match_id": match_id,
         "queue": lane,
+        "size_bytes": size,
         "folder_id": auto_folder_id,
         "tournament_id": auto_tournament_id,
         "xp_awarded": XP_PER_UPLOAD if user else 0,
@@ -604,6 +443,11 @@ async def upload_demo(
     }
 
 
+def _request_org(request: Request) -> str | None:
+    au = getattr(request.state, "academy_user", None)
+    return au.org_id if au else None
+
+
 @app.get("/api/matches")
 async def list_matches(request: Request, limit: int = 40, pro: bool | None = None):
     pro_filter = "" if pro is None else ("AND is_pro" if pro else "AND NOT is_pro")
@@ -612,11 +456,12 @@ async def list_matches(request: Request, limit: int = 40, pro: bool | None = Non
         SELECT match_id, map_name, score_t, score_ct, team_t_name, team_ct_name, created_at, is_pro,
                (SELECT COUNT(*)::int FROM players WHERE players.match_id = matches.match_id) AS player_count
         FROM matches
-        WHERE status = 'ready' {pro_filter}
+        WHERE status = 'ready' {pro_filter} AND (org_id = $2::uuid OR $2::uuid IS NULL)
         ORDER BY created_at DESC
         LIMIT $1
         """,
         min(limit, 100),
+        _request_org(request),
     )
     payload = [dict(r) for r in rows]
     return _cached_json(payload, "public, max-age=60", request)
@@ -629,11 +474,13 @@ async def list_history_players(request: Request, limit: int = 80):
         SELECT p.name, COUNT(DISTINCT p.match_id)::int AS match_count
         FROM players p
         JOIN matches m ON m.match_id = p.match_id AND m.status = 'ready'
+        WHERE (m.org_id = $2::uuid OR $2::uuid IS NULL)
         GROUP BY p.name
         ORDER BY match_count DESC, p.name
         LIMIT $1
         """,
         min(limit, 200),
+        _request_org(request),
     )
     payload = [dict(r) for r in rows]
     return _cached_json(payload, "public, max-age=120", request)
@@ -647,10 +494,11 @@ async def get_player_history(player_name: str, request: Request):
                p.team, m.created_at
         FROM players p
         JOIN matches m ON m.match_id = p.match_id AND m.status = 'ready'
-        WHERE p.name = $1
+        WHERE p.name = $1 AND (m.org_id = $2::uuid OR $2::uuid IS NULL)
         ORDER BY m.created_at DESC
         """,
         player_name,
+        _request_org(request),
     )
     if not rows:
         raise HTTPException(404, "Player not found in any match")
