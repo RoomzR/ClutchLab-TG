@@ -1,17 +1,18 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ShieldCheck } from 'lucide-react';
+import { Lock, Mail, ShieldCheck } from 'lucide-react';
 import { AuthCard, AuthInput, AuthSubmitButton } from '../components/AuthCard';
 import { useAuth } from '../context/AuthContext';
 import { getErrorMessage } from '../api/client';
-import { useT } from '../i18n/LocaleContext';
+import { useLocale, useT } from '../i18n/LocaleContext';
 
 export function LoginPage() {
   const { login, verify2FA } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const t = useT();
+  const { locale } = useLocale();
   const from = (location.state as { from?: string } | null)?.from ?? '/dashboard';
 
   const [email, setEmail] = useState('');
@@ -103,12 +104,25 @@ export function LoginPage() {
 
   return (
     <AuthCard
-      title={t('auth.loginTitle')}
-      subtitle={t('auth.loginSubtitle')}
+      title={
+        locale === 'ru' ? (
+          <>
+            <>
+              С
+              <br />
+              <span className="text-[#d6ff3c]">ВОЗВРАЩЕНИЕМ</span>
+            </>
+          </>
+        ) : (
+          <>
+            WELCOME <span className="text-[#d6ff3c]">BACK</span>
+          </>
+        )
+      }
       footer={
         <>
           {t('auth.noAccount')}{' '}
-          <Link to="/register" className="font-medium text-[var(--color-accent)] hover:brightness-110">
+          <Link to="/register" className="font-medium text-[#d6ff3c] hover:brightness-110">
             {t('auth.signUpFree')}
           </Link>
         </>
@@ -117,6 +131,7 @@ export function LoginPage() {
       <form onSubmit={handleSubmit} className="space-y-4">
         <AuthInput
           label={t('auth.email')}
+          icon={<Mail className="h-4 w-4" aria-hidden />}
           type="email"
           required
           autoComplete="email"
@@ -126,6 +141,7 @@ export function LoginPage() {
         />
         <AuthInput
           label={t('auth.password')}
+          icon={<Lock className="h-4 w-4" aria-hidden />}
           type="password"
           required
           autoComplete="current-password"

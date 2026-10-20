@@ -42,7 +42,7 @@ export function VerifyEmailPage() {
       <div className="flex flex-col items-center gap-4 py-6 text-center">
         {state === 'loading' && (
           <>
-            <Loader2 className="h-10 w-10 animate-spin text-cyan-400" />
+            <Loader2 className="h-10 w-10 animate-spin text-[var(--color-signal)]" />
             <p className="text-sm text-slate-300">Verifying your email…</p>
           </>
         )}
@@ -52,7 +52,7 @@ export function VerifyEmailPage() {
             <p className="text-sm text-slate-300">{message}</p>
             <Link
               to="/dashboard"
-              className="rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 px-6 py-2.5 text-sm font-bold text-white"
+              className="btn-primary px-6 py-2.5 text-sm"
             >
               Go to Dashboard
             </Link>
@@ -62,7 +62,7 @@ export function VerifyEmailPage() {
           <>
             <XCircle className="h-10 w-10 text-red-400" />
             <p className="text-sm text-slate-300">{message}</p>
-            <Link to="/login" className="text-sm font-medium text-cyan-400 hover:text-cyan-300">
+            <Link to="/login" className="text-sm font-medium text-[var(--color-signal)] hover:brightness-110">
               Back to login
             </Link>
           </>

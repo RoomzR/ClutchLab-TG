@@ -35,7 +35,7 @@ export function fmtValue(value: number | null | undefined, unit?: string, digits
     case 'pct':
       return `${value.toFixed(digits ?? 1)}%`;
     case 'money':
-      return `$${Math.round(value).toLocaleString('ru-RU')}`;
+      return `${value < 0 ? '−' : ''}$${Math.abs(Math.round(value)).toLocaleString('ru-RU')}`;
     case 'sec':
       return `${value.toFixed(digits ?? 1)} с`;
     case 'ms':

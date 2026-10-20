@@ -1,134 +1,34 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import {
-  ArrowUpRight,
-  BarChart3,
-  Bomb,
-  Brain,
-  Check,
-  ChevronDown,
-  Crosshair,
-  Loader2,
-  Map as MapIcon,
-  Users,
-} from 'lucide-react';
+import { Check, ChevronDown, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getPlans, type Plan } from '../api/billing';
-import { BrandMark } from '../components/BrandLogo';
-import { useT } from '../i18n/LocaleContext';
+import { useLocale, useT } from '../i18n/LocaleContext';
 import { cn } from '../lib/cn';
 
-const TESTIMONIALS = [
-  {
-    quote:
-      'We stopped guessing where they play defaults. Roundcraft shows the smoke timings our opponents repeat every match.',
-    name: 'Viktor "vekt0r" M.',
-    role: 'IGL · semi-pro',
-  },
-  {
-    quote:
-      'Anti-strat alone is worth it. I prep a lobby in 15 minutes instead of scrubbing demos for three hours.',
-    name: 'Daria "dxsha" K.',
-    role: 'Team analyst',
-  },
-  {
-    quote:
-      'Turns out I peek the same pistol angle every time. Fixed it. Ranked up.',
-    name: 'Tomasz "flickzy" W.',
-    role: 'FACEIT 10',
-  },
-];
+const LIME = '#d6ff3c';
 
-function FaqItem({ q, a }: { q: string; a: string }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={() => setOpen((v) => !v)}
-      className="group w-full border-b border-white/[0.08] px-1 py-5 text-left transition-colors"
-    >
-      <span className="flex items-center justify-between gap-4">
-        <span className="font-display text-lg tracking-tight text-[var(--color-bone)] md:text-xl">
-          {q}
-        </span>
-        <ChevronDown
-          className={cn(
-            'h-5 w-5 shrink-0 text-[var(--color-signal)] transition-transform duration-300',
-            open && 'rotate-180',
-          )}
-        />
-      </span>
-      <div
-        className={cn(
-          'grid transition-all duration-300',
-          open ? 'mt-3 grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
-        )}
-      >
-        <p className="overflow-hidden text-sm leading-relaxed text-[var(--color-steel)]">{a}</p>
-      </div>
-    </button>
-  );
-}
-
-function HeroRadar() {
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_70%_40%,rgba(255,90,31,0.08),transparent_50%)]" />
-      <div className="absolute -right-[12%] top-[8%] h-[min(90vw,720px)] w-[min(90vw,720px)] opacity-40">
-        <div className="absolute inset-0 rounded-full border border-[var(--color-bone)]/10" />
-        <div className="absolute inset-[12%] rounded-full border border-[var(--color-bone)]/10" />
-        <div className="absolute inset-[28%] rounded-full border border-[var(--color-signal)]/25" />
-        <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-[var(--color-bone)]/10" />
-        <div className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-[var(--color-bone)]/10" />
-        <div className="absolute inset-[28%] overflow-hidden rounded-full">
-          <div className="animate-scan absolute left-0 right-0 h-24 bg-gradient-to-b from-transparent via-[var(--color-signal)]/20 to-transparent" />
-        </div>
-        {[
-          ['32%', '38%', 'bg-[var(--color-t)]'],
-          ['48%', '52%', 'bg-[var(--color-ct)]'],
-          ['62%', '34%', 'bg-[var(--color-bone)]'],
-          ['55%', '68%', 'bg-[var(--color-signal)]'],
-        ].map(([l, t, c]) => (
-          <span
-            key={`${l}-${t}`}
-            className={cn('absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full', c)}
-            style={{ left: l, top: t }}
-          />
-        ))}
-      </div>
-      <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#070708] to-transparent" />
-    </div>
-  );
-}
+const MAPS = [
+  { name: 'Mirage', a: '#1c3a4a', b: '#c4a15a', tag: 'A default' },
+  { name: 'Dust II', a: '#3a2a18', b: '#e0b56a', tag: 'Long' },
+  { name: 'Inferno', a: '#3a1814', b: '#ff7a3c', tag: 'Banana' },
+  { name: 'Nuke', a: '#10241c', b: '#3dff9a', tag: 'Outside' },
+  { name: 'Ancient', a: '#102820', b: '#7dffb2', tag: 'Donut' },
+  { name: 'Anubis', a: '#2a2410', b: '#e6c15a', tag: 'Mid' },
+  { name: 'Vertigo', a: '#1a1e28', b: '#9ab0ff', tag: 'A ramp' },
+  { name: 'Overpass', a: '#142018', b: '#8fd18a', tag: 'Monster' },
+] as const;
 
 export function LandingPage() {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const t = useT();
+  const { locale } = useLocale();
+  const ru = locale === 'ru';
   const [plans, setPlans] = useState<Plan[]>([]);
   const [plansLoading, setPlansLoading] = useState(true);
   const [yearly, setYearly] = useState(false);
-
-  const features = useMemo(
-    () => [
-      { icon: MapIcon, title: t('landing.featureReplay'), description: t('landing.featureReplayDesc'), span: 'md:col-span-2' },
-      { icon: Crosshair, title: t('landing.featureHeatmap'), description: t('landing.featureHeatmapDesc'), span: '' },
-      { icon: Bomb, title: t('landing.featureGrenades'), description: t('landing.featureGrenadesDesc'), span: '' },
-      { icon: Brain, title: t('landing.featureHabits'), description: t('landing.featureHabitsDesc'), span: 'md:col-span-2' },
-      { icon: BarChart3, title: t('landing.featureAnalytics'), description: t('landing.featureAnalyticsDesc'), span: '' },
-      { icon: Users, title: t('landing.featureCompare'), description: t('landing.featureCompareDesc'), span: '' },
-    ],
-    [t],
-  );
-
-  const steps = useMemo(
-    () => [
-      { num: '01', title: t('landing.step1Title'), description: t('landing.step1Desc') },
-      { num: '02', title: t('landing.step2Title'), description: t('landing.step2Desc') },
-      { num: '03', title: t('landing.step3Title'), description: t('landing.step3Desc') },
-    ],
-    [t],
-  );
+  const [openFaq, setOpenFaq] = useState<number | null>(0);
 
   const faqs = useMemo(
     () => [
@@ -154,344 +54,316 @@ export function LandingPage() {
   const paidPlans = plans.filter((p) => p.id !== 'FREE');
 
   return (
-    <div className="premium-page">
-      {/* HERO — one composition */}
-      <section className="relative min-h-[92vh] overflow-hidden border-b border-white/[0.06]">
-        <HeroRadar />
-        <div className="relative z-10 mx-auto flex min-h-[92vh] max-w-6xl flex-col justify-end px-4 pb-16 pt-28 md:px-8 md:pb-24 md:pt-32">
-          <p className="eyebrow animate-fade-up mb-6">{t('landing.badge')}</p>
-          <h1 className="animate-fade-up-delay max-w-4xl font-display text-[clamp(2.6rem,7vw,5.5rem)] font-extrabold uppercase leading-[0.92] tracking-[-0.05em] text-[var(--color-bone)]">
-            {t('landing.heroLine1')}{' '}
-            <span className="text-[var(--color-signal)]">{t('landing.heroHighlight')}</span>
-            {t('landing.heroLine2') ? <> {t('landing.heroLine2')}</> : null}
+    <div className="bg-[#050505] text-zinc-100">
+      <section className="mx-auto grid max-w-6xl items-center gap-10 px-4 pb-8 pt-10 md:grid-cols-[1.05fr_0.95fr] md:px-8 md:pt-16">
+        <div className="min-w-0">
+          <h1 className="font-display text-[clamp(2.4rem,6vw,4.6rem)] font-black uppercase leading-[0.92] text-white">
+            {ru ? 'Разбери катку' : 'Read the demo'}
+            <br />
+            <span style={{ color: LIME }}>{ru ? 'по раундам' : 'round by round'}</span>
           </h1>
-          <p className="animate-fade-up-delay-2 mt-6 max-w-xl text-base leading-relaxed text-[var(--color-steel)] md:text-lg">
-            {t('landing.heroSubtitle')}
+          <p className="mt-5 max-w-md text-sm leading-relaxed text-zinc-400 md:text-base">
+            {ru
+              ? 'Загрузи .dem. ИИ отмечает пик без инфы, стрельбу в движении и что тренить первым. 2D-реплей уже стоит на этом тике.'
+              : 'Upload a .dem. The review marks the dry peek, the moving shot, and what to train first. The 2D replay is already on that tick.'}
           </p>
-          <div className="animate-fade-up-delay-2 mt-10 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Link to="/register" className="btn-primary">
-              {t('landing.startTrial')}
+          <div className="mt-7 flex flex-wrap items-center gap-3">
+            <Link
+              to="/register"
+              className="rounded-full px-6 py-3 text-sm font-extrabold text-black"
+              style={{ background: LIME }}
+            >
+              {ru ? 'Загрузить демку' : 'Upload a demo'}
             </Link>
-            <a href="#protocol" className="btn-secondary">
-              {t('landing.seeHow')}
+            <a href="#inside" className="rounded-full border border-white/15 px-6 py-3 text-sm font-semibold text-white">
+              {ru ? 'Что внутри' : "What's inside"}
             </a>
           </div>
-          <p className="mt-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[var(--color-steel)]">
-            {t('landing.trialNote')}
-          </p>
+          <div className="mt-8 flex flex-wrap gap-6 border-t border-white/10 pt-5">
+            {[
+              ['12', ru ? 'типов ошибок' : 'mistake types'],
+              ['8', ru ? 'карт с радаром' : 'radar maps'],
+              ['<90с', ru ? 'разбор демки' : 'demo review'],
+            ].map(([n, label]) => (
+              <div key={label}>
+                <p className="font-display text-3xl font-black text-white">{n}</p>
+                <p className="mt-1 text-[11px] uppercase tracking-[0.16em] text-zinc-500">{label}</p>
+              </div>
+            ))}
+          </div>
         </div>
+        <MatchFrame ru={ru} />
       </section>
 
-      {/* STAT STRIP — after fold */}
-      <section className="border-b border-white/[0.06]">
-        <div className="mx-auto grid max-w-6xl grid-cols-2 md:grid-cols-4">
-          {[
-            { v: '~1 min', k: 'landing.statParse' },
-            { v: '8 maps', k: 'landing.statMaps' },
-            { v: '100%', k: 'landing.statAuto' },
-            { v: 'PRO', k: 'landing.statPriority' },
-          ].map(({ v, k }, i) => (
-            <div
-              key={k}
-              className={cn(
-                'px-6 py-10 md:px-8',
-                i < 3 && 'border-r border-white/[0.06]',
-                i < 2 && 'border-b border-white/[0.06] md:border-b-0',
-              )}
+      <section id="maps" className="mx-auto max-w-6xl px-4 py-14 md:px-8">
+        <div className="mb-6 flex items-end justify-between gap-4">
+          <h2 className="font-display text-3xl font-black uppercase md:text-4xl">{ru ? 'Выбери карту' : 'Pick a map'}</h2>
+          <p className="hidden text-sm text-zinc-500 sm:block">{ru ? 'Радар, раскидки и ошибки по каждой' : 'Radar, lineups and mistakes on each'}</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {MAPS.map((map) => (
+            <Link
+              key={map.name}
+              to="/register"
+              className="group relative aspect-[16/10] overflow-hidden rounded-2xl border border-white/10"
+              style={{ background: `linear-gradient(145deg, ${map.a}, #070707 70%)` }}
             >
-              <p className="font-display text-3xl font-bold uppercase tracking-tight text-[var(--color-bone)] md:text-4xl">
-                {v}
-              </p>
-              <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--color-steel)]">
-                {t(k)}
-              </p>
-            </div>
+              <MapArt accent={map.b} />
+              <span className="absolute left-3 top-3 rounded-full bg-black/50 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-zinc-300">
+                {map.tag}
+              </span>
+              <span className="absolute bottom-3 left-3 font-display text-lg font-black uppercase text-white">
+                {map.name}
+              </span>
+            </Link>
           ))}
         </div>
       </section>
 
-      {/* PROBLEM — brutalist */}
-      <section className="border-b border-white/[0.06] py-20 md:py-28">
-        <div className="mx-auto max-w-6xl px-4 md:px-8">
-          <p className="eyebrow mb-4">{t('landing.problemEyebrow')}</p>
-          <h2 className="max-w-3xl font-display text-3xl font-extrabold uppercase leading-[1.05] tracking-tight text-[var(--color-bone)] md:text-5xl">
-            {t('landing.problemTitle')}
+      <section id="protocol" className="border-y border-white/10 bg-[#080808]">
+        <div className="mx-auto grid max-w-6xl gap-8 px-4 py-14 md:grid-cols-3 md:px-8">
+          <h2 className="font-display text-3xl font-black uppercase md:col-span-3 md:text-4xl">
+            {ru ? 'Как это работает' : 'How it works'}
           </h2>
-          <p className="mt-5 max-w-2xl text-[var(--color-steel)]">{t('landing.problemSubtitle')}</p>
-          <div className="mt-14 grid gap-px bg-white/[0.08] md:grid-cols-3">
-            {[
-              { title: t('landing.problem1Title'), desc: t('landing.problem1Desc') },
-              { title: t('landing.problem2Title'), desc: t('landing.problem2Desc') },
-              { title: t('landing.problem3Title'), desc: t('landing.problem3Desc') },
-            ].map((item, i) => (
-              <div key={item.title} className="bg-[#070708] p-7 transition-colors hover:bg-[#0c0c0e]">
-                <span className="font-mono text-xs text-[var(--color-signal)]">0{i + 1}</span>
-                <h3 className="mt-4 font-display text-xl uppercase tracking-tight text-[var(--color-bone)]">
-                  {item.title}
-                </h3>
-                <p className="mt-3 text-sm leading-relaxed text-[var(--color-steel)]">{item.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* SHIFT */}
-      <section className="border-b border-white/[0.06] py-20 md:py-28">
-        <div className="mx-auto max-w-3xl px-4 text-center md:px-8">
-          <p className="eyebrow mb-4">{t('landing.shiftEyebrow')}</p>
-          <h2 className="font-display text-3xl font-extrabold uppercase tracking-tight text-[var(--color-bone)] md:text-5xl">
-            {t('landing.shiftTitle')}{' '}
-            <span className="text-[var(--color-signal)]">{t('landing.shiftHighlight')}</span>
-          </h2>
-          <p className="mt-6 text-base leading-relaxed text-[var(--color-steel)] md:text-lg">
-            {t('landing.shiftDesc')}
-          </p>
-        </div>
-      </section>
-
-      {/* PROTOCOL */}
-      <section id="protocol" className="border-b border-white/[0.06] bg-[#0a0a0c] py-20 md:py-28">
-        <div className="mx-auto max-w-6xl px-4 md:px-8">
-          <div className="mb-14 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="eyebrow mb-3">{t('landing.stepsEyebrow')}</p>
-              <h2 className="font-display text-3xl font-extrabold uppercase tracking-tight md:text-4xl">
-                {t('landing.stepsTitle')}
-              </h2>
-            </div>
-            <p className="max-w-sm text-sm text-[var(--color-steel)]">{t('landing.stepsSubtitle')}</p>
-          </div>
-          <div className="grid gap-4 md:grid-cols-3">
-            {steps.map(({ num, title, description }) => (
-              <div key={num} className="bento-cell group">
-                <span className="font-display text-5xl font-extrabold text-white/[0.06] transition-colors group-hover:text-[var(--color-signal)]/25">
-                  {num}
-                </span>
-                <h3 className="mt-4 font-display text-xl uppercase tracking-tight">{title}</h3>
-                <p className="mt-3 text-sm leading-relaxed text-[var(--color-steel)]">{description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* BENTO FEATURES */}
-      <section className="border-b border-white/[0.06] py-20 md:py-28">
-        <div className="mx-auto max-w-6xl px-4 md:px-8">
-          <p className="eyebrow mb-3">{t('landing.featuresEyebrow')}</p>
-          <h2 className="mb-12 max-w-2xl font-display text-3xl font-extrabold uppercase tracking-tight md:text-4xl">
-            {t('landing.featuresTitle')}
-          </h2>
-          <div className="grid gap-4 md:grid-cols-3">
-            {features.map(({ icon: Icon, title, description, span }, i) => (
-              <div
-                key={title}
-                className={cn('bento-cell', span, i === 0 && 'bento-cell-signal min-h-[220px]')}
-              >
-                <div className="mb-5 flex h-10 w-10 items-center justify-center border border-white/10 bg-black/30">
-                  <Icon className="h-5 w-5 text-[var(--color-signal)]" />
-                </div>
-                <h3 className="font-display text-xl uppercase tracking-tight">{title}</h3>
-                <p className="mt-3 max-w-md text-sm leading-relaxed text-[var(--color-steel)]">
-                  {description}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* BEFORE / AFTER */}
-      <section className="border-b border-white/[0.06] py-20 md:py-28">
-        <div className="mx-auto max-w-6xl px-4 md:px-8">
-          <h2 className="mb-12 text-center font-display text-3xl font-extrabold uppercase tracking-tight md:text-4xl">
-            {t('landing.beforeAfterTitle')}
-          </h2>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="card-brutal">
-              <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-red-400">
-                {t('landing.beforeLabel')}
+          {[
+            [t('landing.step1Title'), t('landing.step1Desc')],
+            [t('landing.step2Title'), t('landing.step2Desc')],
+            [t('landing.step3Title'), t('landing.step3Desc')],
+          ].map(([title, desc], i) => (
+            <article key={title} className="rounded-2xl border border-white/10 bg-black p-5">
+              <p className="font-display text-4xl font-black" style={{ color: LIME }}>
+                0{i + 1}
               </p>
-              <ul className="mt-6 space-y-4">
-                {(['before1', 'before2', 'before3', 'before4'] as const).map((k) => (
-                  <li key={k} className="flex gap-3 text-sm text-[var(--color-steel)]">
-                    <span className="text-red-400">—</span>
-                    {t(`landing.${k}`)}
-                  </li>
-                ))}
-              </ul>
+              <h3 className="mt-4 font-display text-xl font-bold uppercase">{title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-zinc-400">{desc}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section id="inside" className="mx-auto max-w-6xl px-4 py-14 md:px-8">
+        <h2 className="font-display text-3xl font-black uppercase md:text-4xl">{ru ? 'Что внутри' : "What's inside"}</h2>
+        <div className="mt-6 grid gap-3 md:grid-cols-5">
+          <article className="rounded-2xl border border-white/10 bg-[#0c0c0e] p-4 md:col-span-3">
+            <p className="font-display text-lg font-bold uppercase">{ru ? '2D-реплей на тике ошибки' : '2D replay on the mistake'}</p>
+            <p className="mt-1 text-sm text-zinc-400">
+              {ru ? 'Раунды слева, радар в центре, решение справа.' : 'Rounds on the left, radar in the center, the fix on the right.'}
+            </p>
+            <div className="mt-4 overflow-hidden rounded-xl border border-white/10">
+              <Radar />
             </div>
-            <div className="border border-[var(--color-signal)]/40 bg-[var(--color-signal)]/[0.06] p-6">
-              <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--color-signal)]">
-                {t('landing.afterLabel')}
+          </article>
+          <div className="grid gap-3 md:col-span-2">
+            <article className="rounded-2xl border border-white/10 bg-[#0c0c0e] p-4">
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: LIME }}>
+                {ru ? 'Ошибка' : 'Mistake'}
               </p>
-              <ul className="mt-6 space-y-4">
-                {(['after1', 'after2', 'after3', 'after4'] as const).map((k) => (
-                  <li key={k} className="flex gap-3 text-sm text-[var(--color-bone)]">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-signal)]" />
-                    {t(`landing.${k}`)}
-                  </li>
-                ))}
-              </ul>
-            </div>
+              <p className="mt-2 font-display text-xl font-bold uppercase">{ru ? 'Пик без инфы' : 'Peek without info'}</p>
+              <p className="mt-2 text-sm text-zinc-400">
+                {ru ? 'Тик 18420. Сначала смок, потом угол. Эту раскидку — дважды.' : 'Tick 18420. Smoke first, then the angle. Drill the lineup twice.'}
+              </p>
+            </article>
+            <article className="rounded-2xl border border-white/10 bg-[#0c0c0e] p-4">
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-sky-300">{ru ? 'Чат тренера' : 'Coach chat'}</p>
+              <p className="mt-3 rounded-xl bg-black px-3 py-2 text-sm text-zinc-300">
+                {ru ? 'Почему умер на 16-м?' : 'Why did I die on round 16?'}
+              </p>
+              <p className="mt-2 rounded-xl border border-white/10 px-3 py-2 text-sm text-zinc-400">
+                {ru
+                  ? 'Вышел на коннектор без смока. Доказательство — тик 18420.'
+                  : 'Pushed connector with no smoke. Evidence is tick 18420.'}
+              </p>
+            </article>
           </div>
+        </div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            [ru ? 'Раскидки' : 'Lineups', ru ? 'Видео, точка, твой бросок против эталона' : 'Video, spot, your throw vs the reference'],
+            [ru ? 'Доска' : 'Board', ru ? 'Рисуешь раунд вместе с командой' : 'Draw the round with the team'],
+            [ru ? 'ДЗ' : 'Homework', ru ? 'Тренер назначает, через неделю видно повтор' : 'Coach assigns it, a week later you see the repeat'],
+            [ru ? 'Аналитик' : 'Analyst', ru ? 'ИИ делает черновик, человек закрывает отчёт' : 'AI drafts it, a person closes the report'],
+          ].map(([title, desc]) => (
+            <article key={title} className="rounded-2xl border border-white/10 bg-[#0c0c0e] p-4">
+              <span className="mb-3 block h-2 w-8 rounded-full" style={{ background: LIME }} />
+              <h3 className="font-display text-lg font-bold uppercase">{title}</h3>
+              <p className="mt-2 text-sm text-zinc-400">{desc}</p>
+            </article>
+          ))}
         </div>
       </section>
 
-      {/* PRICING */}
-      <section id="pricing" className="border-b border-white/[0.06] bg-[#0a0a0c] py-20 md:py-28">
-        <div className="mx-auto max-w-6xl px-4 md:px-8">
-          <div className="mb-10 text-center">
-            <h2 className="font-display text-3xl font-extrabold uppercase tracking-tight md:text-4xl">
-              {t('landing.pricingTitle')}
-            </h2>
-            <p className="mt-3 text-sm text-[var(--color-steel)]">{t('landing.pricingSubtitle')}</p>
-          </div>
-
-          <div className="mb-10 flex items-center justify-center gap-4 font-mono text-xs uppercase tracking-[0.2em]">
-            <span className={cn(!yearly ? 'text-[var(--color-bone)]' : 'text-[var(--color-steel)]')}>
-              {t('landing.monthly')}
-            </span>
-            <button
-              type="button"
-              onClick={() => setYearly((v) => !v)}
-              className="relative h-7 w-14 border border-white/15 bg-black/40"
-              aria-label="Toggle yearly pricing"
-            >
-              <span
-                className={cn(
-                  'absolute top-0.5 h-6 w-6 bg-[var(--color-signal)] transition-all',
-                  yearly ? 'left-7' : 'left-0.5',
-                )}
-              />
-            </button>
-            <span className={cn(yearly ? 'text-[var(--color-bone)]' : 'text-[var(--color-steel)]')}>
-              {t('landing.yearly')}{' '}
-              <span className="text-[var(--color-signal)]">{t('landing.yearlySave')}</span>
-            </span>
-          </div>
-
-          {plansLoading ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-[var(--color-signal)]" />
-            </div>
-          ) : paidPlans.length === 0 ? (
-            <p className="text-center text-sm text-[var(--color-steel)]">{t('landing.plansUnavailable')}</p>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-3">
-              {paidPlans.map((plan) => {
-                const highlight = plan.id === 'PRO';
-                const price = yearly ? plan.yearly_price / 12 : plan.monthly_price;
-                return (
-                  <div
-                    key={plan.id}
-                    className={cn(
-                      'relative flex flex-col p-6',
-                      highlight
-                        ? 'border border-[var(--color-signal)] bg-[var(--color-signal)]/[0.07]'
-                        : 'bento-cell',
-                    )}
-                  >
-                    {highlight && (
-                      <span className="absolute -top-3 left-6 bg-[var(--color-signal)] px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-wider text-black">
-                        {t('landing.mostPopular')}
-                      </span>
-                    )}
-                    <h3 className="font-display text-2xl uppercase tracking-tight">{plan.name}</h3>
-                    <p className="mt-4">
-                      <span className="font-display text-4xl font-bold tracking-tight">
-                        ${price.toFixed(2)}
-                      </span>
-                      <span className="text-sm text-[var(--color-steel)]"> {t('landing.perMonth')}</span>
-                    </p>
-                    <ul className="mt-6 flex-1 space-y-2.5">
-                      {plan.features.slice(0, 6).map((feature) => (
-                        <li key={feature} className="flex gap-2 text-sm text-[var(--color-steel)]">
-                          <Check className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-signal)]" />
-                          {feature}
-                        </li>
-                      ))}
-                    </ul>
-                    <Link
-                      to="/register"
-                      className={cn(
-                        'mt-8 block text-center',
-                        highlight ? 'btn-primary w-full' : 'btn-secondary w-full',
-                      )}
-                    >
-                      {highlight ? t('landing.startTrial') : t('landing.choosePlan')}
-                    </Link>
-                    {highlight && (
-                      <p className="mt-3 text-center font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--color-steel)]">
-                        {t('landing.trialNote')}
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* TESTIMONIALS */}
-      <section className="border-b border-white/[0.06] py-20 md:py-28">
-        <div className="mx-auto max-w-6xl px-4 md:px-8">
-          <h2 className="mb-3 font-display text-3xl font-extrabold uppercase tracking-tight md:text-4xl">
-            {t('landing.testimonialsTitle')}
+      <section className="border-y border-white/10 bg-[#080808]">
+        <div className="mx-auto grid max-w-6xl gap-3 px-4 py-14 md:grid-cols-3 md:px-8">
+          <h2 className="font-display text-3xl font-black uppercase md:col-span-3 md:text-4xl">
+            {ru ? 'Для кого' : 'Who it is for'}
           </h2>
-          <p className="mb-12 text-sm text-[var(--color-steel)]">{t('landing.testimonialsSubtitle')}</p>
-          <div className="grid gap-4 md:grid-cols-3">
-            {TESTIMONIALS.map(({ quote, name, role }) => (
-              <figure key={name} className="bento-cell flex flex-col">
-                <blockquote className="flex-1 text-sm leading-relaxed text-[var(--color-bone)]/90">
-                  “{quote}”
-                </blockquote>
-                <figcaption className="mt-8 border-t border-white/[0.08] pt-4">
-                  <p className="font-display text-sm uppercase tracking-tight">{name}</p>
-                  <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--color-steel)]">
-                    {role}
+          {[
+            [ru ? 'Игрок' : 'Player', ru ? 'Свои матчи, повтор ошибок и список на неделю.' : 'Your matches, repeating mistakes, a weekly list.'],
+            [ru ? 'Тренер' : 'Coach', ru ? 'Заметка на тике и ДЗ в один клик.' : 'A note on the tick and homework in one click.'],
+            [ru ? 'Академия' : 'Academy', ru ? 'Общие демки, роли и живой аналитик поверх черновика.' : 'Shared demos, roles, and a human on top of the draft.'],
+          ].map(([title, desc], i) => (
+            <article key={title} className="rounded-2xl border border-white/10 p-5">
+              <p className="font-mono text-xs" style={{ color: LIME }}>0{i + 1}</p>
+              <h3 className="mt-3 font-display text-2xl font-black uppercase">{title}</h3>
+              <p className="mt-2 text-sm text-zinc-400">{desc}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section id="pricing" className="mx-auto max-w-6xl px-4 py-14 md:px-8">
+        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+          <h2 className="font-display text-3xl font-black uppercase md:text-4xl">{t('landing.pricingTitle')}</h2>
+          <button
+            type="button"
+            onClick={() => setYearly((v) => !v)}
+            className="rounded-full border border-white/15 px-4 py-2 text-xs font-bold uppercase tracking-wider text-zinc-300"
+            aria-pressed={yearly}
+          >
+            {yearly ? t('landing.yearly') : t('landing.monthly')}
+          </button>
+        </div>
+        {plansLoading ? (
+          <div className="flex justify-center py-10">
+            <Loader2 className="h-7 w-7 animate-spin" style={{ color: LIME }} aria-label={t('landing.loadingPlans')} />
+          </div>
+        ) : paidPlans.length === 0 ? (
+          <p className="text-sm text-zinc-500">{t('landing.plansUnavailable')}</p>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-3">
+            {paidPlans.map((plan) => {
+              const highlight = plan.id === 'PRO';
+              const price = yearly ? plan.yearly_price / 12 : plan.monthly_price;
+              return (
+                <article
+                  key={plan.id}
+                  className={cn('flex flex-col rounded-2xl border p-5', highlight ? 'border-[#d6ff3c]' : 'border-white/10 bg-[#0c0c0e]')}
+                >
+                  <h3 className="font-display text-xl font-bold uppercase">{plan.name}</h3>
+                  <p className="mt-3 font-display text-4xl font-black">
+                    ${price.toFixed(0)}
+                    <span className="text-sm font-medium text-zinc-500"> {t('landing.perMonth')}</span>
                   </p>
-                </figcaption>
-              </figure>
-            ))}
+                  <ul className="mt-5 flex-1 space-y-2">
+                    {plan.features.slice(0, 6).map((feature) => (
+                      <li key={feature} className="flex gap-2 text-sm text-zinc-400">
+                        <Check className="mt-0.5 h-4 w-4 shrink-0" style={{ color: LIME }} aria-hidden />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                  <Link
+                    to="/register"
+                    className={cn(
+                      'mt-6 block rounded-full py-3 text-center text-sm font-extrabold',
+                      highlight ? 'text-black' : 'border border-white/15 text-white',
+                    )}
+                    style={highlight ? { background: LIME } : undefined}
+                  >
+                    {highlight ? t('landing.startTrial') : t('landing.choosePlan')}
+                  </Link>
+                </article>
+              );
+            })}
           </div>
-        </div>
+        )}
       </section>
 
-      {/* FAQ */}
-      <section className="border-b border-white/[0.06] py-20 md:py-28">
-        <div className="mx-auto max-w-3xl px-4 md:px-8">
-          <h2 className="mb-10 font-display text-3xl font-extrabold uppercase tracking-tight md:text-4xl">
-            {t('landing.faqTitle')}
-          </h2>
-          <div>
-            {faqs.map((faq) => (
-              <FaqItem key={faq.q} q={faq.q} a={faq.a} />
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="relative overflow-hidden py-24 md:py-32">
-        <div className="premium-orb left-1/2 top-0 h-72 w-72 -translate-x-1/2 bg-[var(--color-signal)]/15" />
-        <div className="relative z-10 mx-auto max-w-3xl px-4 text-center md:px-8">
-          <BrandMark className="mx-auto mb-8 h-16 w-16" />
-          <h2 className="font-display text-3xl font-extrabold uppercase tracking-tight md:text-5xl">
-            {t('landing.ctaTitle')}
-          </h2>
-          <p className="mx-auto mt-5 max-w-md text-[var(--color-steel)]">{t('landing.ctaSubtitle')}</p>
-          <Link to="/register" className="btn-primary mt-10 inline-flex gap-2">
-            {t('landing.startTrial')}
-            <ArrowUpRight className="h-4 w-4" />
+      <section className="mx-auto max-w-3xl px-4 pb-16 md:px-8">
+        <h2 className="mb-4 font-display text-3xl font-black uppercase">{t('landing.faqTitle')}</h2>
+        {faqs.map((faq, index) => {
+          const open = openFaq === index;
+          return (
+            <button
+              key={faq.q}
+              type="button"
+              onClick={() => setOpenFaq(open ? null : index)}
+              className="w-full border-b border-white/10 py-4 text-left"
+              aria-expanded={open}
+            >
+              <span className="flex items-center justify-between gap-4">
+                <span className="font-semibold text-white">{faq.q}</span>
+                <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform', open && 'rotate-180')} aria-hidden />
+              </span>
+              {open && <p className="mt-2 text-sm leading-relaxed text-zinc-400">{faq.a}</p>}
+            </button>
+          );
+        })}
+        <div className="mt-10 rounded-3xl border border-white/10 bg-[#0c0c0e] px-6 py-8 text-center">
+          <h2 className="font-display text-3xl font-black uppercase">{t('landing.ctaTitle')}</h2>
+          <Link
+            to="/register"
+            className="mt-6 inline-block rounded-full px-7 py-3 text-sm font-extrabold text-black"
+            style={{ background: LIME }}
+          >
+            {ru ? 'Загрузить демку' : 'Upload a demo'}
           </Link>
-          <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--color-steel)]">
-            {t('landing.trialNote')}
-          </p>
         </div>
       </section>
     </div>
+  );
+}
+
+function MatchFrame({ ru }: { ru: boolean }) {
+  return (
+    <div className="overflow-hidden rounded-3xl border border-white/10 bg-[#0b0d10] shadow-[0_30px_80px_rgba(0,0,0,0.45)]">
+      <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+        <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-zinc-500">de_mirage · scrim</span>
+        <span className="font-display text-sm font-black" style={{ color: LIME }}>
+          13 — 8
+        </span>
+      </div>
+      <div className="grid grid-cols-[92px_1fr] gap-2 p-3">
+        <div className="space-y-1">
+          {['16', '15', '14', '13', '12'].map((round, i) => (
+            <div
+              key={round}
+              className={cn(
+                'rounded-lg px-2 py-1.5 font-mono text-[11px]',
+                i === 0 ? 'bg-[#d6ff3c] text-black' : 'bg-white/5 text-zinc-400',
+              )}
+            >
+              R{round} {i === 0 ? 'CT' : i % 2 ? 'T' : 'CT'}
+            </div>
+          ))}
+        </div>
+        <Radar />
+      </div>
+      <div className="flex items-center justify-between border-t border-white/10 px-4 py-3">
+        <span className="text-xs text-zinc-300">{ru ? 'Пик без инфы · тик 18420' : 'Dry peek · tick 18420'}</span>
+        <span className="rounded-full px-2 py-1 text-[10px] font-bold uppercase text-black" style={{ background: LIME }}>
+          {ru ? 'смотреть' : 'open'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function Radar() {
+  return (
+    <svg viewBox="0 0 280 180" className="h-full w-full rounded-xl bg-[#12160c]">
+      <rect x="18" y="18" width="150" height="70" rx="8" fill="#1c2414" stroke="#3c4a28" />
+      <text x="28" y="40" fill="#d6ff3c" fontSize="11" fontFamily="Unbounded, sans-serif">A</text>
+      <rect x="150" y="96" width="110" height="64" rx="8" fill="#1a2218" stroke="#3c4a28" />
+      <text x="188" y="132" fill="#7dffb2" fontSize="11" fontFamily="Unbounded, sans-serif">B</text>
+      <path d="M90 88 C 120 100, 150 70, 200 78" fill="none" stroke="#6b7a48" strokeWidth="10" strokeLinecap="round" />
+      <circle cx="70" cy="48" r="5" fill="#5b8cff" />
+      <circle cx="108" cy="58" r="5" fill="#5b8cff" />
+      <circle cx="196" cy="124" r="5" fill="#ffb020" />
+      <circle cx="228" cy="140" r="5" fill="#ffb020" />
+      <circle cx="132" cy="70" r="6" fill="none" stroke="#ff5a5a" strokeWidth="2" />
+      <circle cx="150" cy="96" r="16" fill="#c8c8c8" opacity="0.35" />
+    </svg>
+  );
+}
+
+function MapArt({ accent }: { accent: string }) {
+  return (
+    <svg viewBox="0 0 160 100" className="absolute inset-0 h-full w-full opacity-80" aria-hidden>
+      <path d="M10 70 C 40 40, 70 80, 110 36 S 150 20, 160 48" fill="none" stroke={accent} strokeWidth="3" />
+      <path d="M0 78 H160" stroke="white" strokeOpacity="0.15" />
+      <rect x="18" y="22" width="36" height="22" rx="4" fill={accent} opacity="0.35" />
+      <rect x="96" y="48" width="40" height="18" rx="4" fill="white" opacity="0.12" />
+    </svg>
   );
 }

@@ -18,6 +18,7 @@
     "@types/three": "^0.185.1",
     "axios": "^1.18.1",
     "csgo-sharecode": "^5.0.0",
+    "framer-motion": "^14.4.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "leaflet": "^1.9.4",

@@ -459,3 +459,116 @@
   font-weight: bold;
   line-height: 1;
 }
+
+/* Public shell: landing + auth. Does not restyle the academy app. */
+.public-shell {
+  --color-signal: #d6ff3c;
+  --color-bone: #f4f4f5;
+  --color-steel: #a1a1aa;
+  --color-accent: #d6ff3c;
+  --font-display: 'Unbounded', system-ui, sans-serif;
+  background: #050505;
+  color: #f4f4f5;
+  font-family: Manrope, Sora, system-ui, sans-serif;
+}
+
+.public-shell .font-display {
+  font-family: Unbounded, system-ui, sans-serif;
+  letter-spacing: -0.045em;
+}
+
+.public-shell .btn-primary,
+.public-shell .btn-secondary {
+  clip-path: none;
+  border-radius: 999px;
+}
+
+.public-shell .btn-primary {
+  background: #d6ff3c;
+  color: #111;
+  border-color: #d6ff3c;
+  box-shadow: none;
+  font-weight: 800;
+}
+
+.public-shell .btn-primary:hover {
+  background: #e4ff6a;
+  color: #111;
+  border-color: #e4ff6a;
+  transform: scale(1.02);
+}
+
+.pub-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.pub-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 35%, rgba(255, 255, 255, 0.5) 50%, transparent 65%);
+  transform: translateX(-130%);
+  animation: pub-shimmer 3.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes pub-shimmer {
+  0%,
+  55% {
+    transform: translateX(-130%);
+  }
+  100% {
+    transform: translateX(130%);
+  }
+}
+
+.pub-rise {
+  animation: pub-rise 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.pub-rise-1 { animation-delay: 0.12s; }
+.pub-rise-2 { animation-delay: 0.24s; }
+.pub-rise-3 { animation-delay: 0.36s; }
+
+@keyframes pub-rise {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.pub-scan {
+  animation: pub-scan 7s linear infinite;
+}
+
+@keyframes pub-scan {
+  0% { transform: translateY(-30%); opacity: 0; }
+  12% { opacity: 1; }
+  100% { transform: translateY(420%); opacity: 0; }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  html.pub-cursor,
+  html.pub-cursor body,
+  html.pub-cursor a,
+  html.pub-cursor button {
+    cursor: none;
+  }
+
+  html.pub-cursor input,
+  html.pub-cursor textarea,
+  html.pub-cursor select {
+    cursor: text;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pub-rise,
+  .pub-scan,
+  .pub-shimmer::after {
+    animation: none !important;
+  }
+
+  .pub-shimmer::after {
+    opacity: 0;
+  }
+}

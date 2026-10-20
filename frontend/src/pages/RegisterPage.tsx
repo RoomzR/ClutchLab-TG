@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Check } from 'lucide-react';
+import { Check, Lock, Mail, User } from 'lucide-react';
 import { AuthCard, AuthInput, AuthSubmitButton } from '../components/AuthCard';
 import { useAuth } from '../context/AuthContext';
 import { getErrorMessage } from '../api/client';
+import { useLocale } from '../i18n/LocaleContext';
 
 const TRIAL_PERKS = [
   '7-day free Pro trial — no card required',
@@ -14,6 +15,8 @@ const TRIAL_PERKS = [
 
 export function RegisterPage() {
   const { register } = useAuth();
+  const { locale } = useLocale();
+  const ru = locale === 'ru';
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const referral = searchParams.get('ref') ?? undefined;
@@ -52,21 +55,34 @@ export function RegisterPage() {
 
   return (
     <AuthCard
-      title="Create your account"
-      subtitle="Start analyzing your demos in minutes"
+      title={
+        ru ? (
+          <>
+            СОЗДАЙ <span className="text-[#d6ff3c]">АККАУНТ</span>
+          </>
+        ) : (
+          <>
+            CREATE <span className="text-[#d6ff3c]">ACCOUNT</span>
+          </>
+        )
+      }
+      subtitle={ru ? 'Разбор демок академии — бесплатный старт' : 'Academy demo review — start free'}
       footer={
         <>
-          Already have an account?{' '}
-          <Link to="/login" className="font-medium text-cyan-400 hover:text-cyan-300">
-            Log in
+          {ru ? 'Уже есть аккаунт?' : 'Already have an account?'}{' '}
+          <Link to="/login" className="font-medium text-[#d6ff3c] hover:brightness-110">
+            {ru ? 'Войти' : 'Log in'}
           </Link>
         </>
       }
     >
-      <ul className="mb-5 space-y-1.5">
-        {TRIAL_PERKS.map((perk) => (
-          <li key={perk} className="flex items-center gap-2 text-xs text-slate-300">
-            <Check className="h-3.5 w-3.5 shrink-0 text-cyan-400" />
+      <ul className="mb-5 space-y-1.5 rounded-2xl border border-[#d6ff3c]/30 bg-[#d6ff3c]/5 p-3">
+        {(ru
+          ? ['7 дней Pro без карты', 'Разбор раундов и 2D-реплей', 'Ошибки, ДЗ и раскидки']
+          : TRIAL_PERKS
+        ).map((perk) => (
+          <li key={perk} className="flex items-center gap-2 text-xs text-zinc-300">
+            <Check className="h-3.5 w-3.5 shrink-0 text-[#d6ff3c]" />
             {perk}
           </li>
         ))}
@@ -80,7 +96,8 @@ export function RegisterPage() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <AuthInput
-          label="Email"
+          label={ru ? 'Почта' : 'Email'}
+          icon={<Mail className="h-4 w-4" aria-hidden />}
           type="email"
           required
           autoComplete="email"
@@ -89,7 +106,8 @@ export function RegisterPage() {
           onChange={(e) => setEmail(e.target.value)}
         />
         <AuthInput
-          label="Username"
+          label={ru ? 'Ник' : 'Username'}
+          icon={<User className="h-4 w-4" aria-hidden />}
           type="text"
           required
           autoComplete="username"
@@ -100,7 +118,8 @@ export function RegisterPage() {
           onChange={(e) => setUsername(e.target.value)}
         />
         <AuthInput
-          label="Password"
+          label={ru ? 'Пароль' : 'Password'}
+          icon={<Lock className="h-4 w-4" aria-hidden />}
           type="password"
           required
           autoComplete="new-password"
@@ -110,7 +129,7 @@ export function RegisterPage() {
           onChange={(e) => setPassword(e.target.value)}
         />
         <AuthInput
-          label="Confirm password"
+          label={ru ? 'Ещё раз пароль' : 'Confirm password'}
           type="password"
           required
           autoComplete="new-password"
@@ -125,7 +144,7 @@ export function RegisterPage() {
           </p>
         )}
 
-        <AuthSubmitButton loading={loading}>Create Account</AuthSubmitButton>
+        <AuthSubmitButton loading={loading}>{ru ? 'Создать аккаунт' : 'Create account'}</AuthSubmitButton>
 
         <p className="text-center text-[11px] leading-relaxed text-slate-500">
           By signing up you agree to our Terms of Service and Privacy Policy.

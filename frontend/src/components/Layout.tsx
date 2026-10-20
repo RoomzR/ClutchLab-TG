@@ -20,6 +20,24 @@ import { cn } from '../lib/cn';
 import { useAuth } from '../context/AuthContext';
 import { useLocale, useT } from '../i18n/LocaleContext';
 import { BrandMark, BrandWordmark } from './BrandLogo';
+import { PublicCursor } from './public/motion';
+
+function FooterCol({ title, links }: { title: string; links: [string, string][] }) {
+  return (
+    <div>
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-zinc-500">{title}</p>
+      <ul className="mt-3 space-y-2">
+        {links.map(([href, label]) => (
+          <li key={href}>
+            <a href={href} className="text-sm text-zinc-300 hover:text-white">
+              {label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 function LanguageSwitch() {
   const { locale, setLocale } = useLocale();
@@ -162,7 +180,15 @@ export function Layout() {
   const location = useLocation();
   const { isAuthenticated, isLoading } = useAuth();
   const t = useT();
+  const { locale } = useLocale();
   const isLanding = location.pathname === '/';
+  const isPublic =
+    isLanding ||
+    location.pathname === '/login' ||
+    location.pathname === '/register' ||
+    location.pathname === '/forgot-password' ||
+    location.pathname.startsWith('/reset-password') ||
+    location.pathname.startsWith('/verify-email');
   const isDemoWatch = /\/match\/[^/]+\/watch\/?$/.test(location.pathname);
 
   const navItems = [
@@ -176,13 +202,14 @@ export function Layout() {
   ];
 
   return (
-    <div className="premium-page flex min-h-screen flex-col">
+    <div className={cn('premium-page flex min-h-screen flex-col', isPublic && 'public-shell')}>
+      {isPublic && <PublicCursor />}
       {!isDemoWatch && (
       <header
         className={cn(
           'sticky top-0 z-50 border-b backdrop-blur-md',
-          isLanding
-            ? 'border-transparent bg-[#070708]/55'
+          isPublic
+            ? 'border-white/10 bg-black/85'
             : 'border-white/[0.08] bg-[#070708]/90',
         )}
       >
@@ -221,15 +248,26 @@ export function Layout() {
 
             {!isAuthenticated && !isLoading && (
               <>
+                <div className="hidden items-center gap-5 md:flex">
+                  <a href="/#inside" className="text-sm text-zinc-300 hover:text-white">
+                    {t('nav.product')}
+                  </a>
+                  <a href="/#maps" className="text-sm text-zinc-300 hover:text-white">
+                    {locale === 'ru' ? 'Карты' : 'Maps'}
+                  </a>
+                  <a href="/#pricing" className="text-sm text-zinc-300 hover:text-white">
+                    {t('nav.pricing')}
+                  </a>
+                </div>
                 <LanguageSwitch />
-                <Link
-                  to="/login"
-                  className="px-4 py-2 text-sm font-medium text-[var(--color-steel)] transition-colors hover:text-[var(--color-bone)]"
-                >
+                <Link to="/login" className="px-2 text-sm font-semibold text-zinc-300 hover:text-white">
                   {t('nav.login')}
                 </Link>
-                <Link to="/register" className="btn-primary px-4 py-2 text-sm">
-                  {t('nav.getStarted')}
+                <Link
+                  to="/register"
+                  className="rounded-full bg-white px-4 py-2 text-sm font-extrabold text-black hover:bg-zinc-200"
+                >
+                  {locale === 'ru' ? 'Регистрация' : 'Sign up'}
                 </Link>
               </>
             )}
@@ -243,7 +281,7 @@ export function Layout() {
           'mx-auto w-full flex-1',
           isDemoWatch
             ? 'max-w-none px-2 py-2 md:px-3 md:py-3'
-            : isLanding
+            : isPublic
               ? 'max-w-none px-0 py-0'
               : location.pathname.startsWith('/match/') || location.pathname.startsWith('/utility-lab')
                 ? 'max-w-[1600px] px-3 py-5 md:px-5 md:py-6'
@@ -253,7 +291,29 @@ export function Layout() {
         <Outlet />
       </main>
 
-      {!isDemoWatch && (
+      {!isDemoWatch && isPublic && (
+      <footer className="border-t border-white/10 bg-black py-12">
+        <div className="mx-auto grid max-w-6xl gap-8 px-4 md:grid-cols-4 md:px-8">
+          <div>
+            <div className="flex items-center gap-2">
+              <BrandMark className="h-8 w-8" />
+              <span className="font-display text-sm font-black uppercase">
+                Round<span className="text-[#d6ff3c]">craft</span>
+              </span>
+            </div>
+            <p className="mt-3 text-sm text-zinc-500">{t('brand.footer')}</p>
+          </div>
+          <FooterCol title={locale === 'ru' ? 'Продукт' : 'Product'} links={[['/#inside', locale === 'ru' ? 'Разбор' : 'Review'], ['/#maps', locale === 'ru' ? 'Карты' : 'Maps'], ['/#pricing', t('nav.pricing')]]} />
+          <FooterCol title={locale === 'ru' ? 'Академия' : 'Academy'} links={[['/login', t('nav.login')], ['/register', locale === 'ru' ? 'Регистрация' : 'Sign up'], ['/forgot-password', t('auth.forgotPassword')]]} />
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-zinc-500">{locale === 'ru' ? 'Связь' : 'Contact'}</p>
+            <a href="https://t.me/roomzrly" className="mt-3 block text-sm text-[#d6ff3c]" target="_blank" rel="noopener noreferrer">Telegram</a>
+            <p className="mt-4 text-xs text-zinc-600">Руденко Артем Павлович</p>
+          </div>
+        </div>
+      </footer>
+      )}
+      {!isDemoWatch && !isPublic && (
       <footer className="border-t border-white/[0.08] bg-[#070708] py-12">
         <div className="mx-auto max-w-6xl space-y-4 px-4 text-center md:px-8">
           <div className="flex items-center justify-center gap-2">
