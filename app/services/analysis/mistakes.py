@@ -71,7 +71,8 @@ def detect(result: EngineResult, rate: float, lineups: list[dict] | None = None)
                                d["tick"] - int(rate * 3), d["tick"], ev,
                                f"Ближайший тиммейт был в {d['spacing']} юнитах."))
 
-            if d.get("aim_error") is not None and d["aim_error"] >= 40 and d["weapon"] not in ("awp", "ssg08"):
+            # > 90° means shot from behind/flank — a positioning problem, not crosshair placement
+            if d.get("aim_error") is not None and 40 <= d["aim_error"] <= 90 and d["weapon"] not in ("awp", "ssg08"):
                 out.append(_mk("poor_crosshair", rf, v, side, team, "low", d["tick"] - int(rate * 1), d["tick"],
                                {**ev, "aim_error_deg": d["aim_error"]},
                                f"Прицел был в {d['aim_error']}° от {d['killer']} за 250 мс до смерти.", confidence="estimated"))

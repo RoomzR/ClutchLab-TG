@@ -13,3 +13,5 @@ __pycache__/
 # Transfer archives. The map and model packs are multi-gigabyte
 # and exceed GitHub's file size limit, so they stay on disk.
 *.zip
+app/media/
+app/voice_notes/

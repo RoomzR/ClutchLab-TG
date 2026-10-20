@@ -60,6 +60,8 @@ async def retrieve(match_id: str, question: str, players: list[str], limit: int 
         score = float(r["rank"] or 0) * 10
         if rounds and r["round_number"] in rounds:
             score += 6
+            if r["kind"] == "round":
+                score += 5
         if mentioned and r["player_name"] in mentioned:
             score += 5
         if mentioned and any(p in r["text"] for p in mentioned):
